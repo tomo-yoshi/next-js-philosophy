@@ -3,3 +3,10 @@ export interface Product {
     name: string;
     price: number;
 };
+
+export interface Todo {
+    id: string;
+    title: string;
+    completed: boolean;
+    createdAt: string;
+};
