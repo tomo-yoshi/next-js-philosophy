@@ -49,7 +49,7 @@ const initializeDatabase = () => {
                         }
                         console.log("All rows deleted from todos");
 
-                        const sampleTodos = ['Buy groceries', 'Finish project', 'Clean the house'];
+                        const sampleTodos = ['[Sample] Buy groceries', '[Sample] Finish project', '[Sample] Clean the house'];
 
                         // Insert new data into the products table
                         const insertSql = `INSERT INTO todos(id, title) VALUES(?, ?)`;
