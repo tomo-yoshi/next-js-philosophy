@@ -1,27 +1,28 @@
 'use client';
 
-import { Todo } from "@/types";
 import { FormEvent, useState, useOptimistic, startTransition } from "react";
 import TodoPresentation from "./presentation";
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+import { todoSchema, todoUpdateSchema, todoDeleteSchema, type TodoSchema } from '../../schemas';
 
 interface TodoContainerProps {
-    initialTodos: Todo[];
+    initialTodos: TodoSchema[];
 }
 
 type OptimisticAction = 
-    | { type: 'add'; todo: Todo }
+    | { type: 'add'; todo: TodoSchema }
     | { type: 'update'; id: string; completed: boolean }
     | { type: 'delete'; id: string };
 
-const sortTodos = (todos: Todo[]) => {
+const sortTodos = (todos: TodoSchema[]) => {
     return [...todos].sort((a, b) => a.completed ? 1 : b.completed ? -1 : 0);
 };
 
 export default function TodoContainer({ initialTodos }: TodoContainerProps) {
     const [title, setTitle] = useState<string>('');
-    const [todos, setTodos] = useState<Todo[]>(initialTodos);
-    const [optimisticTodos, addOptimisticAction] = useOptimistic<Todo[], OptimisticAction>(
+    const [todos, setTodos] = useState<TodoSchema[]>(initialTodos);
+    const [optimisticTodos, addOptimisticAction] = useOptimistic<TodoSchema[], OptimisticAction>(
         todos,
         (state, action) => {
             switch (action.type) {
@@ -44,8 +45,11 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
     };
 
     // Add todo ==========================================
-    const addTodo = async(newTodo: Todo) => {
+    const addTodo = async(newTodo: TodoSchema) => {
         try {
+            // Validate the new todo
+            todoSchema.parse(newTodo);
+
             const response = await fetch('/api/todos', {
                 method: 'POST',
                 headers: {
@@ -61,8 +65,12 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             setTodos(current => [...current, newTodo]);
         } catch (error) {
             console.error(error);
-            alert('Failed to add todo');
-        };
+            if (error instanceof z.ZodError) {
+                alert(error.errors[0].message);
+            } else {
+                alert('Failed to add todo');
+            }
+        }
     }
 
     const addTodoAction = () => {
@@ -71,7 +79,7 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             return;
         }
 
-        const newTodo: Todo = {
+        const newTodo: TodoSchema = {
             id: uuidv4(),
             title: title,
             completed: false,
@@ -88,16 +96,20 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
         });
     };
     // Add todo end ==========================================
-    
+
     // Update todo ==========================================
     const updateTodo = async (id: string, completed: boolean) => {
         try {
+            const updateData = { id, completed };
+            // Validate the update data
+            todoUpdateSchema.parse(updateData);
+
             const response = await fetch(`/api/todos`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ id, completed }),
+                body: JSON.stringify(updateData),
             });
 
             if (!response.ok) {
@@ -107,7 +119,11 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed } : todo));
         } catch (error) {
             console.error(error);
-            alert('Failed to update todo');
+            if (error instanceof z.ZodError) {
+                alert(error.errors[0].message);
+            } else {
+                alert('Failed to update todo');
+            }
         }
     };
 
@@ -130,11 +146,22 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
     // Delete todo ==========================================
     const deleteTodo = async (id: string) => {
         try {
-            await fetch(`/api/todos`, { method: 'DELETE', body: JSON.stringify({ id }) });
+            const deleteData = { id };
+            // Validate the delete data
+            todoDeleteSchema.parse(deleteData);
+
+            await fetch(`/api/todos`, { 
+                method: 'DELETE', 
+                body: JSON.stringify(deleteData) 
+            });
             setTodos(todos.filter(todo => todo.id !== id));
         } catch (error) {
             console.error(error);
-            alert('Failed to delete todo');
+            if (error instanceof z.ZodError) {
+                alert(error.errors[0].message);
+            } else {
+                alert('Failed to delete todo');
+            }
         }
     };
 
@@ -153,17 +180,23 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
     return (
         <section className="p-4">
             <h2 className="invisible">Todo Container</h2>
-            <form action={addTodoAction} className="flex gap-2 items-center">
-                <label htmlFor="title">Title:
-                    <input className="border" type="text" id="title" name="title" value={title} onChange={handleChange} />
-                </label>
-                <button className="bg-blue-800 text-white px-2 py-1" type="submit">Add</button>
-            </form>
-            <TodoPresentation
-                todos={sortTodos(optimisticTodos)}
-                handleCheckboxChange={handleCheckboxChange}
-                handleDelete={handleDelete}
-            />
+            <section className="my-6">
+                <h3 className="text-lg font-bold">Add Todo</h3>
+                <form action={addTodoAction} className="flex gap-2 items-center">
+                    <label htmlFor="title" className="flex items-center gap-2">Title:
+                        <input className="border border-gray-300 rounded-md p-1" type="text" id="title" name="title" value={title} onChange={handleChange} />
+                    </label>
+                    <button className="bg-blue-800 text-white px-2 py-1" type="submit">Add</button>
+                </form>
+            </section>
+            <section className="my-6">
+                <h3 className="text-lg font-bold">Todo List</h3>
+                <TodoPresentation
+                    todos={sortTodos(optimisticTodos)}
+                    handleCheckboxChange={handleCheckboxChange}
+                    handleDelete={handleDelete}
+                />
+            </section>
         </section>
     );
 };

@@ -11,7 +11,7 @@ export default function TodoPresentation({ todos, handleCheckboxChange, handleDe
   return (
     <ul className="flex flex-col gap-2">
         {todos.map((todo: Todo) => (
-            <li key={todo.id} className="flex items-center gap-2 my-2">
+            <li key={todo.id} className="flex items-center gap-2 my-1">
               <label htmlFor={todo.id} className="flex items-center gap-2">
                 <input
                   id={todo.id}
