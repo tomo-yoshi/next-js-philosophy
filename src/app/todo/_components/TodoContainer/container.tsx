@@ -62,7 +62,8 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
                 throw new Error('Failed to add todo');
             }
 
-            setTodos(current => [...current, newTodo]);
+            return response;
+
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -86,13 +87,18 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             createdAt: new Date().toISOString(),
         };
 
-        startTransition(() => {
+        startTransition(async () => {
             // Add optimistic update
             addOptimisticAction({ type: 'add', todo: newTodo });
             // Make the actual API call
-            addTodo(newTodo);
-            // Reset the title
-            setTitle('');
+            const response = await addTodo(newTodo)
+
+            if (response?.ok) {
+                startTransition(() => {
+                    setTodos(current => [...current, newTodo]);
+                    setTitle('');
+                });
+            }
         });
     };
     // Add todo end ==========================================
@@ -116,7 +122,8 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
                 throw new Error('Failed to update todo');
             }
 
-            setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed } : todo));
+            return response;
+
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -134,11 +141,17 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             throw new Error('Todo not found');
         }
 
-        startTransition(() => {
+        startTransition(async () => {
             // Add optimistic update
             addOptimisticAction({ type: 'update', id, completed: !todo.completed });
             // Make the actual API call
-            updateTodo(id, !todo.completed);
+            const response = await updateTodo(id, !todo.completed);
+
+            if (response?.ok) {
+                startTransition(() => {
+                    setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
+                });
+            }
         });
     };
     // Update todo end ==========================================
@@ -150,11 +163,13 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             // Validate the delete data
             todoDeleteSchema.parse(deleteData);
 
-            await fetch(`/api/todos`, { 
+            const response = await fetch(`/api/todos`, { 
                 method: 'DELETE', 
                 body: JSON.stringify(deleteData) 
             });
-            setTodos(todos.filter(todo => todo.id !== id));
+
+            return response;
+
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -167,11 +182,17 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
 
     const handleDelete = (id: string) => {
         if (window.confirm('Are you sure you want to delete this todo?')) {
-            startTransition(() => {
+            startTransition(async () => {
                 // Add optimistic update
                 addOptimisticAction({ type: 'delete', id });
                 // Make the actual API call
-                deleteTodo(id);
+                const response = await deleteTodo(id);
+
+                if (response?.ok) {
+                    startTransition(() => {
+                        setTodos(todos.filter(todo => todo.id !== id));
+                    });
+                }
             });
         }
     };
