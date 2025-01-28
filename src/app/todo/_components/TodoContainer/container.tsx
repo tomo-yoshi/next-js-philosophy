@@ -4,7 +4,8 @@ import { FormEvent, useState, useOptimistic, startTransition } from "react";
 import TodoPresentation from "./presentation";
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-import { todoSchema, todoUpdateSchema, todoDeleteSchema, type TodoSchema } from '../../schemas';
+import { todoUpdateSchema, todoDeleteSchema, type TodoSchema, todoSchema } from '../../schemas';
+import { createTodo, deleteTodo, updateTodo } from "../../actions";
 
 interface TodoContainerProps {
     initialTodos: TodoSchema[];
@@ -45,25 +46,38 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
     };
 
     // Add todo ==========================================
-    const addTodo = async(newTodo: TodoSchema) => {
+    const addTodoAction = () => {
         try {
-            // Validate the new todo
-            todoSchema.parse(newTodo);
-
-            const response = await fetch('/api/todos', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(newTodo),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to add todo');
+            if (!title) {
+                alert('Title is required');
+                return;
             }
 
-            return response;
+            const newTodo: TodoSchema = {
+                id: uuidv4(),
+                title: title,
+                completed: false,
+                createdAt: new Date().toISOString(),
+            };
 
+            const validatedTodo = todoSchema.parse(newTodo);
+
+            startTransition(async () => {
+                // Add optimistic update
+                addOptimisticAction({ type: 'add', todo: validatedTodo });
+                // Make the actual API call
+                const response = await createTodo(validatedTodo)
+
+                if (response?.ok) {
+                    startTransition(() => {
+                        setTodos(current => [...current, newTodo]);
+                        setTitle('');
+                    });
+                } else {
+                    console.log(response);
+                    alert(response?.error);
+                }
+            });
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -72,58 +86,32 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
                 alert('Failed to add todo');
             }
         }
-    }
-
-    const addTodoAction = () => {
-        if (!title) {
-            alert('Title is required');
-            return;
-        }
-
-        const newTodo: TodoSchema = {
-            id: uuidv4(),
-            title: title,
-            completed: false,
-            createdAt: new Date().toISOString(),
-        };
-
-        startTransition(async () => {
-            // Add optimistic update
-            addOptimisticAction({ type: 'add', todo: newTodo });
-            // Make the actual API call
-            const response = await addTodo(newTodo)
-
-            if (response?.ok) {
-                startTransition(() => {
-                    setTodos(current => [...current, newTodo]);
-                    setTitle('');
-                });
-            }
-        });
     };
     // Add todo end ==========================================
 
     // Update todo ==========================================
-    const updateTodo = async (id: string, completed: boolean) => {
+    const handleCheckboxChange = async (id: string) => {
         try {
-            const updateData = { id, completed };
-            // Validate the update data
-            todoUpdateSchema.parse(updateData);
+            const todo = todos.find(todo => todo.id === id);
 
-            const response = await fetch(`/api/todos`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(updateData),
-            });
-
-            if (!response.ok) {
-                throw new Error('Failed to update todo');
+            if (!todo) {
+                throw new Error('Todo not found');
             }
 
-            return response;
+            const validatedTodo = todoUpdateSchema.parse({id: id, completed: !todo.completed});
 
+            startTransition(async () => {
+                // Add optimistic update
+                addOptimisticAction({ type: 'update', id, completed: !todo.completed });
+                // Make the actual API call
+                const response = await updateTodo(validatedTodo);
+
+                if (response?.ok) {
+                    startTransition(() => {
+                        setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
+                    });
+                }
+            });
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -133,43 +121,33 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             }
         }
     };
-
-    const handleCheckboxChange = async (id: string) => {
-        const todo = todos.find(todo => todo.id === id);
-
-        if (!todo) {
-            throw new Error('Todo not found');
-        }
-
-        startTransition(async () => {
-            // Add optimistic update
-            addOptimisticAction({ type: 'update', id, completed: !todo.completed });
-            // Make the actual API call
-            const response = await updateTodo(id, !todo.completed);
-
-            if (response?.ok) {
-                startTransition(() => {
-                    setTodos(current => current.map(todo => todo.id === id ? { ...todo, completed: !todo.completed } : todo));
-                });
-            }
-        });
-    };
     // Update todo end ==========================================
 
     // Delete todo ==========================================
-    const deleteTodo = async (id: string) => {
+    const handleDelete = (id: string) => {
         try {
-            const deleteData = { id };
-            // Validate the delete data
-            todoDeleteSchema.parse(deleteData);
+            if (window.confirm('Are you sure you want to delete this todo?')) {
 
-            const response = await fetch(`/api/todos`, { 
-                method: 'DELETE', 
-                body: JSON.stringify(deleteData) 
-            });
+                const deleteData = { id };
+                // Validate the delete data
+                const validatedDeleteData = todoDeleteSchema.parse(deleteData);
 
-            return response;
+                startTransition(async () => {
+                    // Add optimistic update
+                    addOptimisticAction({ type: 'delete', id });
+                    // Make the actual API call
+                    const response = await deleteTodo(validatedDeleteData);
 
+                    if (response?.ok) {
+                        startTransition(() => {
+                            setTodos(todos.filter(todo => todo.id !== id));
+                        });
+                    } else {
+                        console.log(response);
+                        alert(response?.error);
+                    }
+                });
+            }
         } catch (error) {
             console.error(error);
             if (error instanceof z.ZodError) {
@@ -177,23 +155,6 @@ export default function TodoContainer({ initialTodos }: TodoContainerProps) {
             } else {
                 alert('Failed to delete todo');
             }
-        }
-    };
-
-    const handleDelete = (id: string) => {
-        if (window.confirm('Are you sure you want to delete this todo?')) {
-            startTransition(async () => {
-                // Add optimistic update
-                addOptimisticAction({ type: 'delete', id });
-                // Make the actual API call
-                const response = await deleteTodo(id);
-
-                if (response?.ok) {
-                    startTransition(() => {
-                        setTodos(todos.filter(todo => todo.id !== id));
-                    });
-                }
-            });
         }
     };
     // Delete todo end ==========================================

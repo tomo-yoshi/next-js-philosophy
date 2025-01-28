@@ -23,12 +23,12 @@ export const createTodo = async (todo: z.infer<typeof todoSchema>) => {
             'INSERT INTO todos (id, title) VALUES (?, ?)',
             [validatedTodo.id, validatedTodo.title]
         );
-        return { success: true, id: validatedTodo.id };
+        return { ok: true, message: 'Todo created successfully' };
     } catch (error) {
         if (error instanceof z.ZodError) {
-            throw new Error(error.errors[0].message);
+            return { ok: false, error: error.errors[0].message };
         }
-        throw new Error('Failed to create todo');
+        return { ok: false, error: 'Failed to create todo' };
     }
 };
 
@@ -40,12 +40,12 @@ export const updateTodo = async (todo: z.infer<typeof todoUpdateSchema>) => {
             'UPDATE todos SET completed = ? WHERE id = ?',
             [validatedTodo.completed, validatedTodo.id]
         );
-        return { success: true };
+        return { ok: true };
     } catch (error) {
         if (error instanceof z.ZodError) {
-            throw new Error(error.errors[0].message);
+            return { ok: false, error: error.errors[0].message };
         }
-        throw new Error('Failed to update todo');
+        return { ok: false, error: 'Failed to update todo' };
     }
 };
 
@@ -54,11 +54,11 @@ export const deleteTodo = async (data: z.infer<typeof todoDeleteSchema>) => {
         const validatedData = todoDeleteSchema.parse(data);
         const db = await openDatabase();
         await db.run('DELETE FROM todos WHERE id = ?', [validatedData.id]);
-        return { success: true };
+        return { ok: true };
     } catch (error) {
         if (error instanceof z.ZodError) {
-            throw new Error(error.errors[0].message);
+            return { ok: false, error: error.errors[0].message };
         }
-        throw new Error('Failed to delete todo');
+        return { ok: false, error: 'Failed to delete todo' };
     }
 };
